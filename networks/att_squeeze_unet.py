@@ -54,7 +54,6 @@ class FireModule(tf.keras.Model):
         left = self.left(x)
         right = self.right(x)
         x = tf.concat([left, right], axis=-1)
-        print(x.shape)
         return x
 
 
@@ -177,10 +176,14 @@ class UpsamplingBlock(tf.keras.Model):
         self.attention = AttentionBlock(att_filters)
 
     def call(self, x, g):
+        #   print(f"Tf input {x.shape}, {g.shape}")
         d = self.upconv(x)
         x = self.attention(d, g)
+        #   print(f"Tf x att shape {x.shape}")
         d = tf.concat([x, d], axis=-1)
+        #   print(f"Tf d shape {d.shape}")
         x = self.fire(d)
+        #  print(f"Tf x out shape {x.shape}")
         return x
 
 
@@ -293,12 +296,20 @@ class AttSqueezeUNet(Model):
 
         if self.__dropout:
             x5 = Dropout(0.2)(x5)
-
+        print(f"Tf x5 shape {x5.shape}")
+        print(f"Tf x4 shape {x4.shape}")
         d5 = self.upsampling_1(x5, x4)
+        print(f"Tf d5 shape {d5.shape}")
         d4 = self.upsampling_2(d5, x3)
+        print(f"Tf d4 shape {d4.shape}")
         d3 = self.upsampling_3(d4, x2)
+        print(f"Tf d3 shape {d4.shape}")
+        print(f"Tf x2 shape {x2.shape}")
+        print(f"Tf d3 shape {d3.shape}")
         d2 = self.upsampling_4(d3, x1)
+        print(f"Tf d2 shape {d2.shape}")
         d1 = self.upsampling_5(d2)
+        print(f"Tf d1 shape {d1.shape}")
 
         d0 = tf.concat([d1, x0], axis=-1)
         d0 = self.conv_2(d0)

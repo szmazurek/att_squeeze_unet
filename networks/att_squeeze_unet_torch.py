@@ -79,3 +79,49 @@ class AttentionBlock(nn.Module):
         psi = self.relu(g1 + x1)
         psi = self.psi(psi)
         return x * psi
+
+
+class UpsamplingBlock(nn.Module):
+    def __init__(
+        self,
+        filters,
+        fire_id,
+        squeeze,
+        expand,
+        strides,
+        deconv_ksize,
+        att_filters,
+        x_input_shape,
+        g_input_shape,
+    ):
+        super(UpsamplingBlock, self).__init__()
+        self.upconv = nn.ConvTranspose2d(
+            in_channels=x_input_shape[1],
+            out_channels=filters,
+            kernel_size=deconv_ksize,
+            stride=strides,
+            padding=(1, 1),
+            output_padding=(1, 1) if strides[0] == 2 else (0, 0),
+        )
+
+        x_dummy = torch.zeros(x_input_shape)
+        g_dummy = torch.zeros(g_input_shape)
+        x_dummy_shape = self.upconv(x_dummy).shape
+        self.attention = AttentionBlock(
+            F_g=x_dummy_shape[1], F_l=g_input_shape[1], F_int=att_filters
+        )
+        g_dummy_shape = self.upconv_attention_block(x_dummy, g_dummy).shape
+        self.fire = FireModule(
+            fire_id, squeeze, expand, in_channels=g_dummy_shape[1]
+        )
+
+    def upconv_attention_block(self, x, g):
+        d = self.upconv(x)
+        x = self.attention(d, g)
+        d = torch.cat([x, d], axis=1)
+        return d
+
+    def forward(self, x, g):
+        d = self.upconv_attention_block(x, g)
+        x = self.fire(d)
+        return x
