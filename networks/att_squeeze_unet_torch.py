@@ -83,8 +83,8 @@ class UpsamplingBlock(nn.Module):
             kernel_size=deconv_ksize,
             stride=strides,
             padding=padding,
+            output_padding=0 if strides == (1, 1) else 1,
         )
-
         x_dummy = torch.zeros(x_input_shape)
         g_dummy = torch.zeros(g_input_shape)
         x_dummy_shape = self.upconv(x_dummy).shape
@@ -112,9 +112,10 @@ class AttSqueezeUNet(nn.Module):
     def __init__(self, n_classes, in_shape, dropout=False):
         super(AttSqueezeUNet, self).__init__()
         self._dropout = dropout
-        x1_shape = [x / 2 for x in in_shape[-2:]]
-        x2_shape = [x / 4 for x in in_shape[-2:]]
-        x3_shape = [x / 8 for x in in_shape[-2:]]
+        x1_shape = [int(x / 2) for x in in_shape[-2:]]
+        x2_shape = [int(x / 4) for x in in_shape[-2:]]
+        x3_shape = [int(x / 8) for x in in_shape[-2:]]
+        x4_shape = [int(x / 16) for x in in_shape[-2:]]
         padding_1 = self.calculate_same_padding(
             in_shape[-2:],
             kernel_size=(3, 3),
@@ -160,6 +161,78 @@ class AttSqueezeUNet(nn.Module):
         self.fire_6 = FireModule(6, 48, 192, in_channels=384)
         self.fire_7 = FireModule(7, 64, 256, in_channels=384)
         self.fire_8 = FireModule(8, 64, 256, in_channels=512)
+        padding_5 = self.calculate_same_padding(
+            x4_shape,
+            kernel_size=(3, 3),
+            stride=(1, 1),
+            dilation=(1, 1),
+        )
+        self.upsampling_1 = UpsamplingBlock(
+            filters=192,
+            fire_id=9,
+            squeeze=48,
+            expand=192,
+            padding=padding_5,
+            strides=(1, 1),
+            deconv_ksize=3,
+            att_filters=96,
+            x_input_shape=(1, 512, x4_shape[0], x4_shape[1]),
+            g_input_shape=(1, 384, x4_shape[0], x4_shape[1]),
+        )
+        padding_6 = padding_5
+        self.upsampling_2 = UpsamplingBlock(
+            filters=128,
+            fire_id=10,
+            squeeze=32,
+            expand=128,
+            strides=(1, 1),
+            deconv_ksize=3,
+            att_filters=64,
+            padding=padding_6,
+            x_input_shape=(1, 384, x4_shape[0], x4_shape[1]),
+            g_input_shape=(1, 256, x4_shape[0], x4_shape[1]),
+        )
+        padding_7 = self.calculate_same_padding(
+            x4_shape, kernel_size=(3, 3), stride=(2, 2), dilation=(1, 1)
+        )
+        self.upsampling_3 = UpsamplingBlock(
+            filters=64,
+            fire_id=11,
+            squeeze=16,
+            expand=64,
+            padding=padding_7,
+            strides=(2, 2),
+            deconv_ksize=3,
+            att_filters=16,
+            x_input_shape=(1, 256, x4_shape[0], x4_shape[1]),
+            g_input_shape=(1, 128, x3_shape[0], x3_shape[1]),
+        )
+        padding_8 = self.calculate_same_padding(
+            x3_shape, kernel_size=(3, 3), stride=(2, 2), dilation=(1, 1)
+        )
+        self.upsampling_4 = UpsamplingBlock(
+            filters=32,
+            fire_id=12,
+            squeeze=16,
+            expand=32,
+            padding=padding_8,
+            strides=(2, 2),
+            deconv_ksize=3,
+            att_filters=4,
+            x_input_shape=(1, 128, x3_shape[0], x3_shape[1]),
+            g_input_shape=(1, 64, x2_shape[0], x2_shape[1]),
+        )
+
+        self.upsampling_5 = nn.Upsample(scale_factor=2)
+        self.upsampling_6 = nn.Upsample(scale_factor=2)
+        self.conv_2 = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size=3, padding="same"),
+            nn.ReLU(inplace=True),
+        )
+        self.conv_3 = nn.Sequential(
+            nn.Conv2d(64, n_classes, kernel_size=1, padding="same"),
+            nn.Softmax(dim=1) if n_classes > 1 else nn.Sigmoid(),
+        )
 
     @staticmethod
     def calculate_same_padding(input_size, kernel_size, stride, dilation):
@@ -231,4 +304,17 @@ class AttSqueezeUNet(nn.Module):
         x5 = self.fire_7(x4)
         x5 = self.fire_8(x5)
 
-        return None
+        if self._dropout:
+            x5 = F.dropout(x5, p=0.5)
+        d5 = self.upsampling_1(x5, x4)
+        d4 = self.upsampling_2(d5, x3)
+        d3 = self.upsampling_3(d4, x2)
+        d2 = self.upsampling_4(d3, x1)
+        d1 = self.upsampling_5(d2)
+
+        d0 = torch.cat([d1, x0], axis=1)
+        d0 = self.conv_2(d0)
+        d0 = self.upsampling_6(d0)
+        d = self.conv_3(d0)
+
+        return d

@@ -278,38 +278,27 @@ class AttSqueezeUNet(Model):
 
     def call(self, x):
         x0 = self.conv_1(x)
-        print(f"Tf x0 shape {x0.shape}")
         x1 = self.max_pooling_1(x0)
-        print(f"Tf x1 shape {x1.shape}")
 
         x2 = self.fire_1(x1)
-        print(f"Tf x2 shape {x2.shape}")
         x2 = self.fire_2(x2)
-        print(f"Tf x2 shape {x2.shape}")
         x2 = self.max_pooling_2(x2)
-        print(f"Tf x2 shape {x2.shape}")
 
         x3 = self.fire_3(x2)
-        print(f"Tf x3 shape {x3.shape}")
         x3 = self.fire_4(x3)
-        print(f"Tf x3 shape {x3.shape}")
         x3 = self.max_pooling_3(x3)
-        print(f"Tf x3 shape {x3.shape}")
 
         x4 = self.fire_5(x3)
-        print(f"Tf x4 shape {x4.shape}")
         x4 = self.fire_6(x4)
-        print(f"Tf x4 shape {x4.shape}")
 
         x5 = self.fire_7(x4)
-        print(f"Tf x5 shape {x5.shape}")
         x5 = self.fire_8(x5)
-        print(f"Tf x5 shape {x5.shape}")
 
         if self.__dropout:
             x5 = Dropout(0.2)(x5)
 
         d5 = self.upsampling_1(x5, x4)
+
         d4 = self.upsampling_2(d5, x3)
         d3 = self.upsampling_3(d4, x2)
 
