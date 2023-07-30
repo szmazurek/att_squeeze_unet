@@ -123,7 +123,7 @@ class AttSqueezeUNet(nn.Module):
             dilation=(1, 1),
         )
         self.conv_1 = nn.Conv2d(
-            3, 64, kernel_size=3, stride=(2, 2), padding=padding_1
+            in_shape[1], 64, kernel_size=3, stride=(2, 2), padding=padding_1
         )
         padding_2 = self.calculate_same_padding(
             x1_shape,
